@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>高级薪资计时器</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            max-width: 600px;
+            margin: 2rem auto;
+            padding: 20px;
+            background: #f0f2f5;
+        }
+
+        .container {
+            background: white;
+            padding: 2rem;
+            border-radius: 15px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+
+        .input-group {
+            margin-bottom: 1.5rem;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 0.5rem;
+            color: #2d3436;
+            font-weight: 500;
+        }
+
+        input {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 16px;
+            transition: border-color 0.3s;
+        }
+
+        input:focus {
+            border-color: #4dabf7;
+            outline: none;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 1.5rem;
+        }
+
+        button {
+            flex: 1;
+            padding: 12px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.2s;
+        }
+
+        #startBtn {
+            background: #4dabf7;
+            color: white;
+        }
+
+        #startBtn:hover {
+            background: #339af0;
+        }
+
+        #resetBtn {
+            background: #ff6b6b;
+            color: white;
+        }
+
+        #resetBtn:hover {
+            background: #ff5252;
+        }
+
+        #result {
+            margin-top: 2rem;
+            padding: 1.5rem;
+            background: #f8f9fa;
+            border-radius: 12px;
+            text-align: center;
+        }
+
+        .metric {
+            display: flex;
+            justify-content: space-between;
+            margin: 1rem 0;
+            padding: 1rem;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+
+        .metric-value {
+            color: #2d3436;
+            font-size: 1.2rem;
+            font-weight: 600;
+        }
+
+        .highlight {
+            color: #4dabf7;
+            font-size: 1.4rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="input-group">
+            <label for="salary">月工资（元）</label>
+            <input type="number" id="salary" placeholder="请输入税前月薪">
+        </div>
+
+        <div class="input-group">
+            <label for="hours">月工作小时</label>
+            <input type="number" id="hours" placeholder="请输入每月工作小时数">
+        </div>
+
+        <div class="button-group">
+            <button id="startBtn" onclick="toggleTimer()">开始计时</button>
+            <button id="resetBtn" onclick="resetTimer()">重置</button>
+        </div>
+
+        <div id="result">
+            <div class="metric">
+                <span>时薪：</span>
+                <span class="metric-value" id="hourlyRate">0.00 元</span>
+            </div>
+            <div class="metric">
+                <span>每秒收入：</span>
+                <span class="metric-value highlight" id="perSecond">0.0000 元</span>
+            </div>
+            <div class="metric">
+                <span>累计收入：</span>
+                <span class="metric-value highlight" id="earned">0.00 元</span>
+            </div>
+            <div class="metric">
+                <span>工作时长：</span>
+                <span class="metric-value highlight" id="duration">0 秒</span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let timer;
+        let startTime;
+        let accumulatedTime = 0;
+        let isRunning = false;
+        let perSecondIncome;
+
+        function calculateRates() {
+            const salary = parseFloat(document.getElementById('salary').value);
+            const hours = parseFloat(document.getElementById('hours').value);
+            
+            // 计算时薪
+            const hourlyRate = salary / hours;
+            document.getElementById('hourlyRate').textContent = hourlyRate.toFixed(2) + ' 元';
+            
+            // 计算每秒收入
+            perSecondIncome = hourlyRate / 3600;
+            document.getElementById('perSecond').textContent = perSecondIncome.toFixed(4) + ' 元';
+        }
+
+        function updateDisplay() {
+            const currentTime = Date.now();
+            const elapsedSeconds = Math.floor((currentTime - startTime) / 1000 + accumulatedTime);
+            
+            document.getElementById('duration').textContent = elapsedSeconds + ' 秒';
+            document.getElementById('earned').textContent = 
+                (perSecondIncome * elapsedSeconds).toFixed(2) + ' 元';
+        }
+
+        function toggleTimer() {
+            if (!validateInputs()) return;
+
+            const btn = document.getElementById('startBtn');
+            
+            if (!isRunning) {
+                // 启动计时
+                isRunning = true;
+                btn.textContent = '暂停';
+                startTime = Date.now();
+                timer = setInterval(updateDisplay, 1000);
+                calculateRates();
+            } else {
+                // 暂停计时
+                isRunning = false;
+                btn.textContent = '继续';
+                clearInterval(timer);
+                accumulatedTime += Math.floor((Date.now() - startTime) / 1000);
+            }
+        }
+
+        function resetTimer() {
+            clearInterval(timer);
+            isRunning = false;
+            accumulatedTime = 0;
+            document.getElementById('startBtn').textContent = '开始计时';
+            
+            // 重置显示
+            document.getElementById('perSecond').textContent = '0.0000 元';
+            document.getElementById('earned').textContent = '0.00 元';
+            document.getElementById('duration').textContent = '0 秒';
+            document.getElementById('hourlyRate').textContent = '0.00 元';
+            
+            // 可选：清空输入
+            // document.getElementById('salary').value = '';
+            // document.getElementById('hours').value = '';
+        }
+
+        function validateInputs() {
+            const salary = document.getElementById('salary').value;
+            const hours = document.getElementById('hours').value;
+            
+            if (!salary || !hours || isNaN(salary) || isNaN(hours)) {
+                alert('请填写有效的薪资和工作时长');
+                return false;
+            }
+            return true;
+        }
+    </script>
+</body>
+</html>
