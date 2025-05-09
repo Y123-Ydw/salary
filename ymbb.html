@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>极简记账系统</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            --primary-color: #2c3e50;
+            --accent-color: #3498db;
+            --background: #f8f9fa;
+        }
+
+        body {
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: var(--background);
+            color: var(--primary-color);
+        }
+
+        .form-container {
+            background: white;
+            padding: 2rem;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+            margin-bottom: 2rem;
+        }
+
+        .form-group {
+            margin-bottom: 1.2rem;
+        }
+
+        input, select {
+            padding: 0.8rem;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            width: 200px;
+            transition: all 0.2s;
+            font-size: 14px;
+        }
+
+        input:focus, select:focus {
+            outline: none;
+            border-color: var(--accent-color);
+            box-shadow: 0 0 0 2px rgba(52,152,219,0.2);
+        }
+
+        button {
+            background: linear-gradient(135deg, #3498db, #2980b9);
+            color: white;
+            border: none;
+            padding: 0.8rem 1.5rem;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-weight: 500;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        button:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 6px rgba(0,0,0,0.15);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        .table-btn {
+            padding: 0.4rem 0.8rem;
+            margin: 0 2px;
+            font-size: 13px;
+        }
+
+        .stats-card {
+            background: white;
+            padding: 1.5rem;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+            margin-bottom: 2rem;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: white;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+        }
+
+        th, td {
+            padding: 1rem;
+            text-align: left;
+            border-bottom: 1px solid #eee;
+        }
+
+        th {
+            background: var(--background);
+        }
+
+        .filter-group {
+            display: flex;
+            gap: 1rem;
+            margin: 1.5rem 0;
+            flex-wrap: wrap;
+        }
+
+        .chart-container {
+            background: white;
+            padding: 1.5rem;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+            margin: 2rem 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="form-container">
+        <h2 style="margin-top: 0; margin-bottom: 1.5rem;">记录新支出</h2>
+        <div class="form-group">
+            <input type="number" id="amount" step="0.01" placeholder="输入金额" required>
+        </div>
+        <div class="form-group">
+            <select id="type">
+                <option value="餐饮">餐饮</option>
+                <option value="交通">交通</option>
+                <option value="购物">购物</option>
+                <option value="住房">住房</option>
+                <option value="其他">其他</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <input type="date" id="date" required>
+        </div>
+        <div class="form-group">
+            <input type="text" id="remark" placeholder="备注（可选）">
+        </div>
+        <button onclick="addRecord()">＋ 添加记录</button>
+    </div>
+
+    <div class="stats-card">
+        <h3>统计概览</h3>
+        <div id="totalStats" style="margin: 1rem 0;"></div>
+        <div id="monthlyStats"></div>
+    </div>
+
+    <div class="filter-group">
+        <select id="filterType" style="flex: 1;">
+            <option value="">所有类型</option>
+            <option value="餐饮">餐饮</option>
+            <option value="交通">交通</option>
+            <option value="购物">购物</option>
+            <option value="住房">住房</option>
+            <option value="其他">其他</option>
+        </select>
+        <input type="date" id="startDate" style="flex: 1;">
+        <input type="date" id="endDate" style="flex: 1;">
+        <button onclick="applyFilter()" style="flex: 0.5;">应用筛选</button>
+    </div>
+
+    <h3>所有记录</h3>
+    <button onclick="exportData()" style="margin-bottom: 1rem;">导出数据</button>
+    <table id="recordsTable">
+        <thead>
+            <tr>
+                <th>日期</th>
+                <th>类型</th>
+                <th>金额</th>
+                <th>备注</th>
+                <th>操作</th>
+            </tr>
+        </thead>
+        <tbody id="recordsBody">
+        </tbody>
+    </table>
+
+    <div class="chart-container">
+        <canvas id="categoryChart"></canvas>
+    </div>
+    <div class="chart-container">
+        <canvas id="trendChart"></canvas>
+    </div>
+
+    <script>
+        let records = JSON.parse(localStorage.getItem('accountRecords') || '[]');
+        let filteredRecords = [...records];
+        let charts = {};
+
+        function initCharts() {
+            const ctx1 = document.getElementById('categoryChart');
+            const ctx2 = document.getElementById('trendChart');
+            
+            charts.categoryChart = new Chart(ctx1, {
+                type: 'pie',
+                data: {
+                    datasets: [{
+                        data: [],
+                        backgroundColor: ['#e74c3c', '#3498db', '#9b59b6', '#f1c40f', '#2ecc71']
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: { position: 'bottom' }
+                    }
+                }
+            });
+
+            charts.trendChart = new Chart(ctx2, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: '每日支出',
+                        data: [],
+                        borderColor: '#3498db',
+                        tension: 0.2,
+                        fill: false
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        y: { beginAtZero: true }
+                    }
+                }
+            });
+        }
+
+        function addRecord() {
+            const amount = document.getElementById('amount');
+            const date = document.getElementById('date');
+            
+            if (!amount.value) {
+                alert('请输入金额');
+                return;
+            }
+            if (!date.value) {
+                alert('请选择日期');
+                return;
+            }
+
+            const newRecord = {
+                id: Date.now(),
+                amount: parseFloat(amount.value),
+                type: document.getElementById('type').value,
+                date: date.value,
+                remark: document.getElementById('remark').value
+            };
+
+            records.push(newRecord);
+            saveData();
+            applyFilter(); // 应用当前筛选条件
+            clearForm();
+        }
+
+        function deleteRecord(id) {
+            records = records.filter(record => record.id !== id);
+            saveData();
+            applyFilter();
+        }
+
+        function editRecord(id) {
+            const record = records.find(r => r.id === id);
+            if (record) {
+                document.getElementById('amount').value = record.amount;
+                document.getElementById('type').value = record.type;
+                document.getElementById('date').value = record.date;
+                document.getElementById('remark').value = record.remark;
+                deleteRecord(id);
+            }
+        }
+
+        function applyFilter() {
+            const typeFilter = document.getElementById('filterType').value;
+            const startDate = document.getElementById('startDate').value;
+            const endDate = document.getElementById('endDate').value;
+
+            filteredRecords = records.filter(record => {
+                const dateValid = (!startDate || record.date >= startDate) && 
+                                (!endDate || record.date <= endDate);
+                const typeValid = !typeFilter || record.type === typeFilter;
+                return dateValid && typeValid;
+            });
+
+            refreshDisplay();
+        }
+
+        function saveData() {
+            localStorage.setItem('accountRecords', JSON.stringify(records));
+        }
+
+        function refreshDisplay() {
+            document.getElementById('recordsBody').innerHTML = filteredRecords
+                .map(record => `
+                    <tr>
+                        <td>${record.date}</td>
+                        <td>${record.type}</td>
+                        <td>¥${record.amount.toFixed(2)}</td>
+                        <td>${record.remark}</td>
+                        <td>
+                            <button class="table-btn" onclick="editRecord(${record.id})">编辑</button>
+                            <button class="table-btn" onclick="deleteRecord(${record.id})">删除</button>
+                        </td>
+                    </tr>
+                `).join('');
+
+            updateStatistics();
+            updateCharts();
+        }
+
+        function updateStatistics() {
+            const total = filteredRecords.reduce((sum, r) => sum + r.amount, 0);
+            const monthly = filteredRecords.reduce((acc, r) => {
+                const month = r.date.substr(0, 7);
+                acc[month] = (acc[month] || 0) + r.amount;
+                return acc;
+            }, {});
+
+            document.getElementById('totalStats').innerHTML = `
+                <div style="font-size: 1.2rem; color: var(--accent-color); margin-bottom: 1rem;">
+                    总支出：¥${total.toFixed(2)}
+                </div>
+            `;
+
+            document.getElementById('monthlyStats').innerHTML = `
+                <div style="margin-top: 1rem;">
+                    ${Object.entries(monthly).map(([month, total]) => `
+                        <div style="display: flex; justify-content: space-between; padding: 0.5rem 0; border-bottom: 1px solid #eee;">
+                            <span>${month}</span>
+                            <span>¥${total.toFixed(2)}</span>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+        }
+
+        function updateCharts() {
+            // 分类统计
+            const categoryData = filteredRecords.reduce((acc, r) => {
+                acc[r.type] = (acc[r.type] || 0) + r.amount;
+                return acc;
+            }, {});
+
+            // 趋势统计
+            const trendData = filteredRecords.reduce((acc, r) => {
+                acc[r.date] = (acc[r.date] || 0) + r.amount;
+                return acc;
+            }, {});
+
+            // 更新图表
+            charts.categoryChart.data.labels = Object.keys(categoryData);
+            charts.categoryChart.data.datasets[0].data = Object.values(categoryData);
+            charts.categoryChart.update();
+
+            const sortedDates = Object.keys(trendData).sort();
+            charts.trendChart.data.labels = sortedDates;
+            charts.trendChart.data.datasets[0].data = sortedDates.map(d => trendData[d]);
+            charts.trendChart.update();
+        }
+
+        function exportData() {
+            const dataStr = JSON.stringify(filteredRecords);
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(new Blob([dataStr], {type: 'application/json'}));
+            link.download = 'account_records.json';
+            link.click();
+        }
+
+        function clearForm() {
+            document.getElementById('amount').value = '';
+            document.getElementById('date').value = '';
+            document.getElementById('remark').value = '';
+        }
+
+        // 初始化
+        initCharts();
+        refreshDisplay();
+    </script>
+</body>
+</html>
